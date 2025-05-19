@@ -1,4 +1,4 @@
-### Genetic Programming Classifier
+# Genetic Programming Classifier
 
 This project implements a **Genetic Programming (GP) Classifier** in Java to evolve mathematical expression trees capable of classifying financial data instances (e.g., stock market data) into binary labels (0.0 or 1.0). The core functionality includes genetic operators like subtree crossover and grow mutation.
 
