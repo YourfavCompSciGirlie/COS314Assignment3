@@ -20,7 +20,9 @@ class DataPoint {
 abstract class Node {
     abstract double evaluate(DataPoint dp);
 
-    abstract int classify(DataPoint dp);
+    int classify(DataPoint dp) {
+        return (int) evaluate(dp) > 0 ? 1 : 0; // Example classification
+    }
 
     abstract String print();
 }
@@ -52,11 +54,6 @@ class TerminalNode extends Node {
     }
 
     @Override
-    int classify(DataPoint dp) {
-        return (int) evaluate(dp);
-    }
-
-    @Override
     String print() {
         return feature;
     }
@@ -73,11 +70,6 @@ class ConstantNode extends Node {
     @Override
     double evaluate(DataPoint dp) {
         return value;
-    }
-
-    @Override
-    int classify(DataPoint dp) {
-        return (int) value;
     }
 
     @Override
@@ -121,11 +113,6 @@ class OperatorNode extends Node {
     }
 
     @Override
-    int classify(DataPoint dp) {
-        return (int) evaluate(dp);
-    }
-
-    @Override
     String print() {
         return "(" + left.print() + " " + operator + " " + right.print() + ")";
     }
@@ -143,12 +130,7 @@ class IfNode extends Node {
 
     @Override
     double evaluate(DataPoint dp) {
-        return condition.evaluate(dp) != 0 ? thenBranch.evaluate(dp) : elseBranch.evaluate(dp);
-    }
-
-    @Override
-    int classify(DataPoint dp) {
-        return (int) evaluate(dp);
+        return condition.evaluate(dp) > 0 ? thenBranch.evaluate(dp) : elseBranch.evaluate(dp);
     }
 
     @Override
@@ -184,10 +166,13 @@ class DataLoader {
 
 // === Main (for testing purposes) ===
 public class GP_Classifier {
-    private static final int MAX_GENERATIONS = 100;
-    private static final int POPULATION_SIZE = 100;
+    private static final int MAX_GENERATIONS = 50;
+    private static final int POPULATION_SIZE = 500;
     private static final int MAX_TREE_DEPTH = 5;
+    private static final int TOURNAMENT_SIZE = 5;
     private static final int SEED = 42;
+    private static final boolean ELITISM = true;
+    private static final int ELITISM_COUNT = 5;
     private static final double CROSSOVER_RATE = 0.7;
     private static final double MUTATION_RATE = 0.1;
 
@@ -195,22 +180,36 @@ public class GP_Classifier {
     private static final String[] OPERATORS = { "+", "-", "*", "/", ">", "<" };
 
     public static void main(String[] args) throws IOException {
-        List<DataPoint> dataset = DataLoader.loadCSV("./Euro_USD_STOCK/BTC_train.csv");
-
+        // Load datasets
         List<DataPoint> trainingData = DataLoader.loadCSV("./Euro_USD_STOCK/BTC_train.csv");
         List<DataPoint> testingData = DataLoader.loadCSV("./Euro_USD_STOCK/BTC_test.csv");
 
+        System.out.println("Starting evolution...");
         Node evolvedTree = evolveTree(trainingData);
+        System.out.println("Evolution complete!");
 
-        int correct = 0;
-        for (DataPoint dp : testingData) {
-            if (evolvedTree.classify(dp) == dp.output) correct++;
-        }
+        // Calculate training accuracy
+        double trainingAccuracy = calculateAccuracy(evolvedTree, trainingData);
+        System.out.println("Training Accuracy: " + (trainingAccuracy * 100.0) + "%");
 
+        // Calculate testing accuracy
+        double testingAccuracy = calculateAccuracy(evolvedTree, testingData);
+        System.out.println("Testing Accuracy: " + (testingAccuracy * 100.0) + "%");
+        
+        System.out.println("Rule: " + evolvedTree.print());
+        
+        // Output confusion matrix for test data
+        int[] confusionMatrix = calculateConfusionMatrix(evolvedTree, testingData);
+        System.out.println("Confusion Matrix (Test Data):");
+        System.out.println("True Positive: " + confusionMatrix[0]);
+        System.out.println("False Positive: " + confusionMatrix[1]);
+        System.out.println("False Negative: " + confusionMatrix[2]);
+        System.out.println("True Negative: " + confusionMatrix[3]);    
 
-        System.out.println("Accuracy: " + (correct * 100.0 / dataset.size()) + "%");
-       //  System.out.println("Rule: " + evolvedTree.print());
+        double f1Score = calculateF1Score(confusionMatrix);
+        System.out.println("F1 Score: " + f1Score);
     }
+
 
     private static Node evolveTree(List<DataPoint> dataset) {
         // 1. Initialize population of random trees
@@ -224,82 +223,123 @@ public class GP_Classifier {
         Random rand = new Random(SEED);
         List<Node> population = new ArrayList<>();
 
-        // 1. Initial population
+          // 1. Initial population
         for (int i = 0; i < POPULATION_SIZE; i++) {
-            population.add(randomTree(MAX_TREE_DEPTH));
+            population.add(randomTree(rand, MAX_TREE_DEPTH));
         }
 
-        Node best = null;
-        double bestFitness = -1;
+        Node bestEver = null;
+        double bestEverFitness = -1;
 
         // 2. Evolution loop
         for (int gen = 0; gen < MAX_GENERATIONS; gen++) {
+            // Calculate fitness for all individuals
+            Map<Node, Double> fitnessMap = new HashMap<>();
+            for (Node individual : population) {
+                double fitness = fitness(individual, dataset);
+                fitnessMap.put(individual, fitness);
+                
+                // Track best overall
+                if (fitness > bestEverFitness) {
+                    bestEverFitness = fitness;
+                    bestEver = cloneTree(individual);
+                }
+            }
+            
+            // Sort population by fitness
+            population.sort((a, b) -> Double.compare(fitnessMap.get(b), fitnessMap.get(a)));
+            
+            // Report progress
+           // double avgFitness = fitnessMap.values().stream().mapToDouble(Double::doubleValue).average().orElse(0);
+
+
+            // Create new population
             List<Node> newPopulation = new ArrayList<>();
+            
+            // Apply elitism if enabled
+            if (ELITISM) {
+                for (int i = 0; i < Math.min(ELITISM_COUNT, population.size()); i++) {
+                    newPopulation.add(cloneTree(population.get(i)));
+                }
+            }
 
+            // Fill the rest of the population
             while (newPopulation.size() < POPULATION_SIZE) {
-                Node parent1 = selectTree(population, dataset);
-                Node parent2 = selectTree(population, dataset);
+                Node parent1 = tournamentSelect(population, fitnessMap, rand);
+                Node parent2 = tournamentSelect(population, fitnessMap, rand);
 
-                Node child;
+                Node child1, child2;
                 if (rand.nextDouble() < CROSSOVER_RATE) {
-                    child = crossover(parent1, parent2);
+                    Node[] children = crossover(parent1, parent2, rand);
+                    child1 = children[0];
+                    child2 = children[1];
                 } else {
-                    child = cloneTree(parent1);
+                    child1 = cloneTree(parent1);
+                    child2 = cloneTree(parent2);
                 }
 
                 if (rand.nextDouble() < MUTATION_RATE) {
-                    child = mutate(child);
+                    child1 = mutate(child1, rand);
+                }
+                if (rand.nextDouble() < MUTATION_RATE) {
+                    child2 = mutate(child2, rand);
                 }
 
-                newPopulation.add(child);
-            }
-
-            // Evaluate best
-            for (Node n : newPopulation) {
-                double f = fitness(n, dataset);
-                if (f > bestFitness) {
-                    bestFitness = f;
-                    best = n;
+                newPopulation.add(child1);
+                if (newPopulation.size() < POPULATION_SIZE) {
+                    newPopulation.add(child2);
                 }
             }
 
             population = newPopulation;
-            // System.out.println("Gen " + gen + " | Best Fitness: " + bestFitness);
         }
 
-        return best;
+        return bestEver != null ? bestEver : population.get(0);
+
     }
 
-    private static Node randomTree(int depth) {
-        Random rand = new Random(SEED);
-        if (depth == 0 || rand.nextDouble() < 0.3) {
-            if (rand.nextBoolean()) {
+    private static Node randomTree(Random rand, int maxDepth) {
+        if (maxDepth == 0 || (maxDepth < 3 && rand.nextDouble() < 0.6)) {
+            if (rand.nextDouble() < 0.7) {
                 String feature = FEATURES[rand.nextInt(FEATURES.length)];
                 return new TerminalNode(feature);
             } else {
-                return new ConstantNode(rand.nextDouble() * 50000); // Random constant
+                // Random constant, scaled appropriately for financial data
+                double value = (rand.nextDouble() - 0.5) * 100;
+                return new ConstantNode(value);
             }
         } else {
-            Node left = randomTree(depth - 1);
-            Node right = randomTree(depth - 1);
-            String op = OPERATORS[rand.nextInt(OPERATORS.length)];
-            return new OperatorNode(op, left, right);
+            // Decide what type of node to create
+            double nodeType = rand.nextDouble();
+            
+            if (nodeType < 0.7) { // Create operator node
+                Node left = randomTree(rand, maxDepth - 1);
+                Node right = randomTree(rand, maxDepth - 1);
+                String op = OPERATORS[rand.nextInt(OPERATORS.length)];
+                return new OperatorNode(op, left, right);
+            } else { // Create if node
+                Node condition = randomTree(rand, maxDepth - 1);
+                Node thenBranch = randomTree(rand, maxDepth - 1);
+                Node elseBranch = randomTree(rand, maxDepth - 1);
+                return new IfNode(condition, thenBranch, elseBranch);
+            }
         }
     }
 
-    private static Node selectTree(List<Node> population, List<DataPoint> dataset) {
+private static Node tournamentSelect(List<Node> population, Map<Node, Double> fitnessMap, Random rand) {
         Node best = null;
-        double bestFit = -1;
-        Random rand = new Random(SEED);
-        for (int i = 0; i < 5; i++) {
+        double bestFitness = -1;
+        
+        for (int i = 0; i < TOURNAMENT_SIZE; i++) {
             Node candidate = population.get(rand.nextInt(population.size()));
-            double fit = fitness(candidate, dataset);
-            if (fit > bestFit) {
+            double fitness = fitnessMap.get(candidate);
+            
+            if (best == null || fitness > bestFitness) {
                 best = candidate;
-                bestFit = fit;
+                bestFitness = fitness;
             }
         }
-
+        
         return best;
     }
 
@@ -312,73 +352,157 @@ public class GP_Classifier {
         return correct / (double) dataset.size();
     }
 
-    private static Node crossover(Node parent1, Node parent2) {
+    private static Node[] crossover(Node parent1, Node parent2, Random rand) {
         // Implement crossover logic
-        Random rand = new Random(SEED);
-        if (rand.nextDouble() > CROSSOVER_RATE) return parent1;
+        Node[] result = new Node[2];
+        result[0] = cloneTree(parent1);
+        result[1] = cloneTree(parent2);
+        
+        // Get all nodes from each tree
+        List<Node> nodesP1 = getAllNodes(result[0]);
+        List<Node> nodesP2 = getAllNodes(result[1]);
+        
+        if (nodesP1.isEmpty() || nodesP2.isEmpty()) {
+            return result;
+        }
+        
+        // Select random crossover points
+        Node crossPoint1 = nodesP1.get(rand.nextInt(nodesP1.size()));
+        Node crossPoint2 = nodesP2.get(rand.nextInt(nodesP2.size()));
+        
+        // Replace node in first tree
+        replaceNode(result[0], crossPoint1, cloneSubtree(crossPoint2));
+        
+        // Replace node in second tree (for second child)
+        replaceNode(result[1], crossPoint2, cloneSubtree(crossPoint1));
+        
+        return result;   
+    }
 
-        return crossoverSubtree(parent1, parent2, MAX_TREE_DEPTH);
+    private static List<Node> getAllNodes(Node root) {
+        List<Node> nodes = new ArrayList<>();
+        collectNodes(root, nodes);
+        return nodes;
     }
     
-    private static Node crossoverSubtree(Node a, Node b, int maxDepth) {
-        Random rand = new Random(SEED);
-        if (rand.nextDouble() < 0.1 || maxDepth == 0 || isLeaf(a) || isLeaf(b)) {
-            return copyTree(rand.nextBoolean() ? a : b); // swap
-        }
-
-        if (a instanceof OperatorNode && b instanceof OperatorNode) {
-            OperatorNode ao = (OperatorNode) a;
-            OperatorNode bo = (OperatorNode) b;
-
-            return new OperatorNode(ao.operator,
-                crossoverSubtree(ao.left, bo.left, maxDepth - 1),
-                crossoverSubtree(ao.right, bo.right, maxDepth - 1)
-            );
-        } else if (a instanceof IfNode && b instanceof IfNode) {
-            IfNode ai = (IfNode) a;
-            IfNode bi = (IfNode) b;
-
-            return new IfNode(
-                crossoverSubtree(ai.condition, bi.condition, maxDepth - 1),
-                crossoverSubtree(ai.thenBranch, bi.thenBranch, maxDepth - 1),
-                crossoverSubtree(ai.elseBranch, bi.elseBranch, maxDepth - 1)
-            );
-        }
-
-        return rand.nextBoolean() ? copyTree(a) : copyTree(b);
-    }
-
-    private static Node mutate(Node tree) { // grow mutation for exploration
-        // Implement mutation logic
-        Random rand = new Random(SEED);
-        if (rand.nextDouble() < 0.1) {
-            return randomTree(MAX_TREE_DEPTH); // replace whole subtree
-        }
-        return mutateSubtree(tree, MAX_TREE_DEPTH);
-    }    
-
-    private static Node mutateSubtree(Node node, int depth) {
-        if (depth == 0 || node instanceof TerminalNode || node instanceof ConstantNode) {
-            return randomTree(1); // Replace with a small random subtree
-        }
-
-        Random rand = new Random(SEED);
+    private static void collectNodes(Node node, List<Node> nodes) {
+        if (node == null) return;
+        
+        nodes.add(node);
+        
         if (node instanceof OperatorNode) {
             OperatorNode op = (OperatorNode) node;
-            if (rand.nextBoolean()) {
-                op.left = mutateSubtree(op.left, depth - 1);
-            } else {
-                op.right = mutateSubtree(op.right, depth - 1);
-            }
+            collectNodes(op.left, nodes);
+            collectNodes(op.right, nodes);
         } else if (node instanceof IfNode) {
             IfNode ifn = (IfNode) node;
-            int choice = rand.nextInt(3);
-            if (choice == 0) ifn.condition = mutateSubtree(ifn.condition, depth - 1);
-            else if (choice == 1) ifn.thenBranch = mutateSubtree(ifn.thenBranch, depth - 1);
-            else if (choice == 2) ifn.elseBranch = mutateSubtree(ifn.elseBranch, depth - 1);
+            collectNodes(ifn.condition, nodes);
+            collectNodes(ifn.thenBranch, nodes);
+            collectNodes(ifn.elseBranch, nodes);
         }
+    }
+    
+    private static boolean replaceNode(Node tree, Node target, Node replacement) {
+        if (tree instanceof OperatorNode) {
+            OperatorNode op = (OperatorNode) tree;
+            
+            if (op.left == target) {
+                op.left = replacement;
+                return true;
+            }
+            if (op.right == target) {
+                op.right = replacement;
+                return true;
+            }
+            
+            return replaceNode(op.left, target, replacement) || 
+                   replaceNode(op.right, target, replacement);
+                   
+        } else if (tree instanceof IfNode) {
+            IfNode ifn = (IfNode) tree;
+            
+            if (ifn.condition == target) {
+                ifn.condition = replacement;
+                return true;
+            }
+            if (ifn.thenBranch == target) {
+                ifn.thenBranch = replacement;
+                return true;
+            }
+            if (ifn.elseBranch == target) {
+                ifn.elseBranch = replacement;
+                return true;
+            }
+            
+            return replaceNode(ifn.condition, target, replacement) || 
+                   replaceNode(ifn.thenBranch, target, replacement) ||
+                   replaceNode(ifn.elseBranch, target, replacement);
+        }
+        
+        return false;
+    }
+    
+  
+    private static Node mutate(Node tree, Random rand) { // grow mutation for exploration
+       Node mutated = cloneTree(tree);
+        List<Node> allNodes = getAllNodes(mutated);
+        
+        if (allNodes.isEmpty()) {
+            return mutated;
+        }
+        
+        // Select random node to mutate
+        Node targetNode = allNodes.get(rand.nextInt(allNodes.size()));
+        
+        // Select mutation type
+        double mutationType = rand.nextDouble();
+        
+        if (mutationType < 0.3) {
+            // Replace with completely new random subtree
+            Node replacement = randomTree(rand, 3); // Limit depth of new random tree
+            replaceNode(mutated, targetNode, replacement);
+        } else if (mutationType < 0.6) {
+            // Point mutation - modify node but keep structure
+            if (targetNode instanceof TerminalNode) {
+                // Change the feature
+                ((TerminalNode) targetNode).feature = FEATURES[rand.nextInt(FEATURES.length)];
+            } else if (targetNode instanceof ConstantNode) {
+                // Change the constant value
+                ((ConstantNode) targetNode).value = (rand.nextDouble() - 0.5) * 100;
+            } else if (targetNode instanceof OperatorNode) {
+                // Change the operator
+                ((OperatorNode) targetNode).operator = OPERATORS[rand.nextInt(OPERATORS.length)];
+            }
+        } else {
+            // Grow mutation - add complexity
+            if (targetNode instanceof TerminalNode || targetNode instanceof ConstantNode) {
+                Node replacement;
+                if (rand.nextBoolean()) {
+                    // Replace with an operator node
+                    replacement = new OperatorNode(
+                        OPERATORS[rand.nextInt(OPERATORS.length)],
+                        cloneTree(targetNode),
+                        randomTree(rand, 2)
+                    );
+                } else {
+                    // Replace with an if node
+                    replacement = new IfNode(
+                        randomTree(rand, 2),
+                        cloneTree(targetNode),
+                        randomTree(rand, 2)
+                    );
+                }
+                replaceNode(mutated, targetNode, replacement);
+            }
+        }
+        
+        return mutated;
+    }    
 
-        return node;
+    
+
+    private static Node cloneSubtree(Node node) {
+        return cloneTree(node);
     }
 
     private static Node cloneTree(Node tree) {
@@ -395,23 +519,59 @@ public class GP_Classifier {
         }
         return null;
     }
-    private static Node copyTree(Node node) {
-        if (node instanceof TerminalNode) {
-            return new TerminalNode(((TerminalNode) node).feature);
-        } else if (node instanceof ConstantNode) {
-            return new ConstantNode(((ConstantNode) node).value);
-        } else if (node instanceof OperatorNode) {
-            OperatorNode op = (OperatorNode) node;
-            return new OperatorNode(op.operator, copyTree(op.left), copyTree(op.right));
-        } else if (node instanceof IfNode) {
-            IfNode ifn = (IfNode) node;
-            return new IfNode(copyTree(ifn.condition), copyTree(ifn.thenBranch), copyTree(ifn.elseBranch));
-        }
 
-        return null;
+    
+
+      
+    private static double calculateAccuracy(Node tree, List<DataPoint> dataset) {
+        int correct = 0;
+        for (DataPoint dp : dataset) {
+            if (tree.classify(dp) == dp.output) {
+                correct++;
+            }
+        }
+        return correct / (double) dataset.size();
     }
 
-    private static boolean isLeaf(Node node) {
-        return (node instanceof TerminalNode || node instanceof ConstantNode);
-    }   
+     private static int[] calculateConfusionMatrix(Node tree, List<DataPoint> dataset) {
+        int truePositives = 0;
+        int falsePositives = 0;
+        int falseNegatives = 0;
+        int trueNegatives = 0;
+        
+        for (DataPoint dp : dataset) {
+            int prediction = tree.classify(dp);
+            int actual = dp.output;
+            
+            if (prediction == 1 && actual == 1) {
+                truePositives++;
+            } else if (prediction == 1 && actual == 0) {
+                falsePositives++;
+            } else if (prediction == 0 && actual == 1) {
+                falseNegatives++;
+            } else if (prediction == 0 && actual == 0) {
+                trueNegatives++;
+            }
+        }
+        
+        return new int[] {truePositives, falsePositives, falseNegatives, trueNegatives};
+    }
+
+    private static double calculateF1Score(int[] confusionMatrix) {
+        int truePositives = confusionMatrix[0];
+        int falsePositives = confusionMatrix[1];
+        int falseNegatives = confusionMatrix[2];
+        
+        // Calculate precision and recall
+        double precision = truePositives == 0 ? 0 : 
+            (double) truePositives / (truePositives + falsePositives);
+        double recall = truePositives == 0 ? 0 : 
+            (double) truePositives / (truePositives + falseNegatives);
+        
+        // Calculate F1 score
+        double f1Score = (precision + recall) == 0 ? 0 : 
+            2 * (precision * recall) / (precision + recall);
+            
+        return f1Score;
+    }
 }
