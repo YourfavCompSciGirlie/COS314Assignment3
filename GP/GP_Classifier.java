@@ -166,11 +166,11 @@ class DataLoader {
 
 // === Main (for testing purposes) ===
 public class GP_Classifier {
-    private static final int MAX_GENERATIONS = 50;
-    private static final int POPULATION_SIZE = 500;
+    private static int MAX_GENERATIONS = 50;
+    private static int POPULATION_SIZE = 500;
     private static final int MAX_TREE_DEPTH = 5;
     private static final int TOURNAMENT_SIZE = 5;
-    private static final int SEED = 42;
+    private static int SEED = 42;
     private static final boolean ELITISM = true;
     private static final int ELITISM_COUNT = 5;
     private static final double CROSSOVER_RATE = 0.7;
@@ -181,12 +181,25 @@ public class GP_Classifier {
 
     public static void main(String[] args) throws IOException {
         // Load datasets
+
+        System.out.println("===== Generic Programming Stock Price Classifier =====");
+        System.out.println("Enter seed value: ");
+        Scanner scanner = new Scanner(System.in);
+        SEED = scanner.nextInt();
+        
+        System.out.println("Enter population size: ");
+        POPULATION_SIZE = scanner.nextInt();
+
+        System.out.println("Enter max generations: ");
+        MAX_GENERATIONS= scanner.nextInt();
+        scanner.close();
+
         List<DataPoint> trainingData = DataLoader.loadCSV("./Euro_USD_STOCK/BTC_train.csv");
         List<DataPoint> testingData = DataLoader.loadCSV("./Euro_USD_STOCK/BTC_test.csv");
 
-        System.out.println("Starting evolution...");
+        System.out.println("\nStarting evolution...");
         Node evolvedTree = evolveTree(trainingData);
-        System.out.println("Evolution complete!");
+        System.out.println("Evolution complete! \n");
 
         // Calculate training accuracy
         double trainingAccuracy = calculateAccuracy(evolvedTree, trainingData);
@@ -196,7 +209,7 @@ public class GP_Classifier {
         double testingAccuracy = calculateAccuracy(evolvedTree, testingData);
         System.out.println("Testing Accuracy: " + (testingAccuracy * 100.0) + "%");
         
-        System.out.println("Rule: " + evolvedTree.print());
+        System.out.println("\n Rule: " + evolvedTree.print() + "\n");
         
         // Output confusion matrix for test data
         int[] confusionMatrix = calculateConfusionMatrix(evolvedTree, testingData);
@@ -206,8 +219,12 @@ public class GP_Classifier {
         System.out.println("False Negative: " + confusionMatrix[2]);
         System.out.println("True Negative: " + confusionMatrix[3]);    
 
+        int[] confusionMatrixTrain = calculateConfusionMatrix(evolvedTree, trainingData);
+
         double f1Score = calculateF1Score(confusionMatrix);
-        System.out.println("F1 Score: " + f1Score);
+        double f1ScoreTrain = calculateF1Score(confusionMatrixTrain);
+        System.out.println("\nF1 Score (Test Data): " + f1Score);
+        System.out.println("F1 Score (Train Data): " + f1ScoreTrain);
     }
 
 
@@ -574,4 +591,7 @@ private static Node tournamentSelect(List<Node> population, Map<Node, Double> fi
             
         return f1Score;
     }
+
+    
+
 }
