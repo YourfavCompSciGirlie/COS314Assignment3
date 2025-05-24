@@ -1,0 +1,121 @@
+=== ENGINEERED FEATURES ===
+  Daily_Return
+  High_Low_Range
+  Body_Size
+  Upper_Shadow
+  Lower_Shadow
+  Price_Position
+  Volatility
+  Gap
+  Trend_Strength
+  Relative_Volume
+  SMA3_Close
+  Close_vs_SMA3
+  Close_to_High_Ratio
+  Close_to_Low_Ratio
+  Open_to_Close_Ratio
+  Output
+
+=== INFORMATION GAIN ANALYSIS ===
+  Daily_Return: 0.9463
+  High_Low_Range: 0
+  Body_Size: 0.0188
+  Upper_Shadow: 0
+  Lower_Shadow: 0
+  Price_Position: 0.2959
+  Volatility: 0
+  Gap: 0
+  Trend_Strength: 0.0757
+  Relative_Volume: 0
+  SMA3_Close: 0
+  Close_vs_SMA3: 0.3505
+  Close_to_High_Ratio: 0.1038
+  Close_to_Low_Ratio: 0.064
+  Open_to_Close_Ratio: 0.2667
+Best feature: Daily_Return (gain: 0.9463)
+
+=== CLASS DISTRIBUTION ===
+Class 0: 470 instances
+Class 1: 528 instances
+
+=== DECISION TREE STRUCTURE ===
+J48 pruned tree
+------------------
+
+Daily_Return <= 0.000776
+|   Daily_Return <= -17.13971: 0 (322.0)
+|   Daily_Return > -17.13971
+|   |   Gap <= 4.06169: 0 (138.0/1.0)
+|   |   Gap > 4.06169
+|   |   |   Daily_Return <= -12.14001
+|   |   |   |   Gap <= 14.63686: 0 (10.0/2.0)
+|   |   |   |   Gap > 14.63686: 1 (10.0/2.0)
+|   |   |   Daily_Return > -12.14001: 1 (53.0)
+Daily_Return > 0.000776: 1 (465.0/1.0)
+
+Number of Leaves  : 	6
+
+Size of the tree : 	11
+
+=== 10-Fold Cross-Validation ===
+
+Correctly Classified Instances         978               97.996  %
+Incorrectly Classified Instances        20                2.004  %
+Kappa statistic                          0.9598
+Mean absolute error                      0.0223
+Root mean squared error                  0.1269
+Relative absolute error                  4.4674 %
+Root relative squared error             25.4266 %
+Total Number of Instances              998     
+
+=== Detailed Accuracy By Class ===
+
+                 TP Rate  FP Rate  Precision  Recall   F-Measure  MCC      ROC Area  PRC Area  Class
+                 0.974    0.015    0.983      0.974    0.979      0.960    0.989     0.987     0
+                 0.985    0.026    0.977      0.985    0.981      0.960    0.989     0.981     1
+Weighted Avg.    0.980    0.021    0.980      0.980    0.980      0.960    0.989     0.983     
+
+=== Confusion Matrix ===
+
+   a   b   <-- classified as
+ 458  12 |   a = 0
+   8 520 |   b = 1
+
+=== Test Set Evaluation ===
+
+Correctly Classified Instances         262               99.6198 %
+Incorrectly Classified Instances         1                0.3802 %
+Kappa statistic                          0.9924
+Mean absolute error                      0.0084
+Root mean squared error                  0.0614
+Relative absolute error                  1.6883 %
+Root relative squared error             12.2767 %
+Total Number of Instances              263     
+
+=== Detailed Accuracy By Class ===
+
+                 TP Rate  FP Rate  Precision  Recall   F-Measure  MCC      ROC Area  PRC Area  Class
+                 1.000    0.008    0.992      1.000    0.996      0.992    0.996     0.992     0
+                 0.992    0.000    1.000      0.992    0.996      0.992    0.996     0.996     1
+Weighted Avg.    0.996    0.004    0.996      0.996    0.996      0.992    0.996     0.994     
+
+=== Confusion Matrix ===
+
+   a   b   <-- classified as
+ 130   0 |   a = 0
+   1 132 |   b = 1
+
+
+=== PERFORMANCE SUMMARY ===
+Cross-Validation Accuracy: 97.996%
+Test Set Accuracy: 99.6198%
+Cross-Validation Precision: 0.98
+Test Set Precision: 0.9962
+Cross-Validation Recall: 0.98
+Test Set Recall: 0.9962
+Cross-Validation F1-Score: 0.98
+Test Set F1-Score: 0.9962
+Tree Leaves: 6.0
+Tree Size: 11.0
+Best Feature: Daily_Return
+Max Information Gain: 0.9463
