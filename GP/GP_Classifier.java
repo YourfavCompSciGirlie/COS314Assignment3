@@ -1,6 +1,11 @@
 import java.io.*;
 import java.util.*;
 
+import weka.core.Instances;
+import weka.filters.Filter;
+import weka.classifiers.Evaluation;
+import weka.classifiers.Classifier;
+
 // === Data Model ===
 class DataPoint {
     double open, high, low, close, adjClose;
@@ -186,12 +191,12 @@ public class GP_Classifier {
         System.out.println("Enter seed value: ");
         Scanner scanner = new Scanner(System.in);
         SEED = scanner.nextInt();
-        
+
         System.out.println("Enter population size: ");
         POPULATION_SIZE = scanner.nextInt();
 
         System.out.println("Enter max generations: ");
-        MAX_GENERATIONS= scanner.nextInt();
+        MAX_GENERATIONS = scanner.nextInt();
         scanner.close();
 
         List<DataPoint> trainingData = DataLoader.loadCSV("./Euro_USD_STOCK/BTC_train.csv");
@@ -208,16 +213,16 @@ public class GP_Classifier {
         // Calculate testing accuracy
         double testingAccuracy = calculateAccuracy(evolvedTree, testingData);
         System.out.println("Testing Accuracy: " + (testingAccuracy * 100.0) + "%");
-        
+
         System.out.println("\n Rule: " + evolvedTree.print() + "\n");
-        
+
         // Output confusion matrix for test data
         int[] confusionMatrix = calculateConfusionMatrix(evolvedTree, testingData);
         System.out.println("Confusion Matrix (Test Data):");
         System.out.println("True Positive: " + confusionMatrix[0]);
         System.out.println("False Positive: " + confusionMatrix[1]);
         System.out.println("False Negative: " + confusionMatrix[2]);
-        System.out.println("True Negative: " + confusionMatrix[3]);    
+        System.out.println("True Negative: " + confusionMatrix[3]);
 
         int[] confusionMatrixTrain = calculateConfusionMatrix(evolvedTree, trainingData);
 
@@ -225,8 +230,50 @@ public class GP_Classifier {
         double f1ScoreTrain = calculateF1Score(confusionMatrixTrain);
         System.out.println("\nF1 Score (Test Data): " + f1Score);
         System.out.println("F1 Score (Train Data): " + f1ScoreTrain);
-    }
 
+        System.out.println("\nRunning Weka GP Classifier...");
+
+        // Load Weka datasets once
+        Instances train = null;
+        Instances test = null;
+        try {
+            weka.core.converters.ConverterUtils.DataSource trainSource = new weka.core.converters.ConverterUtils.DataSource(
+                    "./Euro_USD_Stock/BTC_train.csv");
+            weka.core.converters.ConverterUtils.DataSource testSource = new weka.core.converters.ConverterUtils.DataSource(
+                    "./Euro_USD_Stock/BTC_test.csv");
+            train = trainSource.getDataSet();
+            test = testSource.getDataSet();
+            if (train.classIndex() == -1)
+                train.setClassIndex(train.numAttributes() - 1);
+            if (test.classIndex() == -1)
+                test.setClassIndex(test.numAttributes() - 1);
+        } catch (Exception e) {
+            System.err.println("Failed to load Weka datasets.");
+            e.printStackTrace();
+            return;
+        }
+
+        // Prepare file writer for output scores
+        BufferedWriter writer = new BufferedWriter(new FileWriter("../wilxon_test/gp_f1_scores.txt", false)); // overwrite
+                                                                                                              // old
+                                                                                                              // file
+
+        System.out.println("Running 10 GP trials for Wilcoxon test:");
+        for (int i = 0; i < 10; i++) {
+            int currentSeed = 42 + i; // Different seed each time
+            try {
+                double f1ScoreWeka = runGP(train, test, currentSeed);
+                System.out.printf("Run %d (Seed %d) - F1 Score: %.4f%n", i + 1, currentSeed, f1ScoreWeka);
+                writer.write(f1ScoreWeka + "\n");
+            } catch (Exception e) {
+                System.err.printf("Run %d failed due to error:%n", i + 1);
+                e.printStackTrace();
+            }
+        }
+
+        writer.close();
+        System.out.println("All scores written to ../wilxon_test/gp_f1_scores.txt");
+    }
 
     private static Node evolveTree(List<DataPoint> dataset) {
         // 1. Initialize population of random trees
@@ -240,7 +287,7 @@ public class GP_Classifier {
         Random rand = new Random(SEED);
         List<Node> population = new ArrayList<>();
 
-          // 1. Initial population
+        // 1. Initial population
         for (int i = 0; i < POPULATION_SIZE; i++) {
             population.add(randomTree(rand, MAX_TREE_DEPTH));
         }
@@ -255,24 +302,24 @@ public class GP_Classifier {
             for (Node individual : population) {
                 double fitness = fitness(individual, dataset);
                 fitnessMap.put(individual, fitness);
-                
+
                 // Track best overall
                 if (fitness > bestEverFitness) {
                     bestEverFitness = fitness;
                     bestEver = cloneTree(individual);
                 }
             }
-            
+
             // Sort population by fitness
             population.sort((a, b) -> Double.compare(fitnessMap.get(b), fitnessMap.get(a)));
-            
-            // Report progress
-           // double avgFitness = fitnessMap.values().stream().mapToDouble(Double::doubleValue).average().orElse(0);
 
+            // Report progress
+            // double avgFitness =
+            // fitnessMap.values().stream().mapToDouble(Double::doubleValue).average().orElse(0);
 
             // Create new population
             List<Node> newPopulation = new ArrayList<>();
-            
+
             // Apply elitism if enabled
             if (ELITISM) {
                 for (int i = 0; i < Math.min(ELITISM_COUNT, population.size()); i++) {
@@ -328,7 +375,7 @@ public class GP_Classifier {
         } else {
             // Decide what type of node to create
             double nodeType = rand.nextDouble();
-            
+
             if (nodeType < 0.7) { // Create operator node
                 Node left = randomTree(rand, maxDepth - 1);
                 Node right = randomTree(rand, maxDepth - 1);
@@ -343,20 +390,20 @@ public class GP_Classifier {
         }
     }
 
-private static Node tournamentSelect(List<Node> population, Map<Node, Double> fitnessMap, Random rand) {
+    private static Node tournamentSelect(List<Node> population, Map<Node, Double> fitnessMap, Random rand) {
         Node best = null;
         double bestFitness = -1;
-        
+
         for (int i = 0; i < TOURNAMENT_SIZE; i++) {
             Node candidate = population.get(rand.nextInt(population.size()));
             double fitness = fitnessMap.get(candidate);
-            
+
             if (best == null || fitness > bestFitness) {
                 best = candidate;
                 bestFitness = fitness;
             }
         }
-        
+
         return best;
     }
 
@@ -374,26 +421,26 @@ private static Node tournamentSelect(List<Node> population, Map<Node, Double> fi
         Node[] result = new Node[2];
         result[0] = cloneTree(parent1);
         result[1] = cloneTree(parent2);
-        
+
         // Get all nodes from each tree
         List<Node> nodesP1 = getAllNodes(result[0]);
         List<Node> nodesP2 = getAllNodes(result[1]);
-        
+
         if (nodesP1.isEmpty() || nodesP2.isEmpty()) {
             return result;
         }
-        
+
         // Select random crossover points
         Node crossPoint1 = nodesP1.get(rand.nextInt(nodesP1.size()));
         Node crossPoint2 = nodesP2.get(rand.nextInt(nodesP2.size()));
-        
+
         // Replace node in first tree
         replaceNode(result[0], crossPoint1, cloneSubtree(crossPoint2));
-        
+
         // Replace node in second tree (for second child)
         replaceNode(result[1], crossPoint2, cloneSubtree(crossPoint1));
-        
-        return result;   
+
+        return result;
     }
 
     private static List<Node> getAllNodes(Node root) {
@@ -401,12 +448,13 @@ private static Node tournamentSelect(List<Node> population, Map<Node, Double> fi
         collectNodes(root, nodes);
         return nodes;
     }
-    
+
     private static void collectNodes(Node node, List<Node> nodes) {
-        if (node == null) return;
-        
+        if (node == null)
+            return;
+
         nodes.add(node);
-        
+
         if (node instanceof OperatorNode) {
             OperatorNode op = (OperatorNode) node;
             collectNodes(op.left, nodes);
@@ -418,11 +466,11 @@ private static Node tournamentSelect(List<Node> population, Map<Node, Double> fi
             collectNodes(ifn.elseBranch, nodes);
         }
     }
-    
+
     private static boolean replaceNode(Node tree, Node target, Node replacement) {
         if (tree instanceof OperatorNode) {
             OperatorNode op = (OperatorNode) tree;
-            
+
             if (op.left == target) {
                 op.left = replacement;
                 return true;
@@ -431,13 +479,13 @@ private static Node tournamentSelect(List<Node> population, Map<Node, Double> fi
                 op.right = replacement;
                 return true;
             }
-            
-            return replaceNode(op.left, target, replacement) || 
-                   replaceNode(op.right, target, replacement);
-                   
+
+            return replaceNode(op.left, target, replacement) ||
+                    replaceNode(op.right, target, replacement);
+
         } else if (tree instanceof IfNode) {
             IfNode ifn = (IfNode) tree;
-            
+
             if (ifn.condition == target) {
                 ifn.condition = replacement;
                 return true;
@@ -450,30 +498,29 @@ private static Node tournamentSelect(List<Node> population, Map<Node, Double> fi
                 ifn.elseBranch = replacement;
                 return true;
             }
-            
-            return replaceNode(ifn.condition, target, replacement) || 
-                   replaceNode(ifn.thenBranch, target, replacement) ||
-                   replaceNode(ifn.elseBranch, target, replacement);
+
+            return replaceNode(ifn.condition, target, replacement) ||
+                    replaceNode(ifn.thenBranch, target, replacement) ||
+                    replaceNode(ifn.elseBranch, target, replacement);
         }
-        
+
         return false;
     }
-    
-  
+
     private static Node mutate(Node tree, Random rand) { // grow mutation for exploration
-       Node mutated = cloneTree(tree);
+        Node mutated = cloneTree(tree);
         List<Node> allNodes = getAllNodes(mutated);
-        
+
         if (allNodes.isEmpty()) {
             return mutated;
         }
-        
+
         // Select random node to mutate
         Node targetNode = allNodes.get(rand.nextInt(allNodes.size()));
-        
+
         // Select mutation type
         double mutationType = rand.nextDouble();
-        
+
         if (mutationType < 0.3) {
             // Replace with completely new random subtree
             Node replacement = randomTree(rand, 3); // Limit depth of new random tree
@@ -497,26 +544,22 @@ private static Node tournamentSelect(List<Node> population, Map<Node, Double> fi
                 if (rand.nextBoolean()) {
                     // Replace with an operator node
                     replacement = new OperatorNode(
-                        OPERATORS[rand.nextInt(OPERATORS.length)],
-                        cloneTree(targetNode),
-                        randomTree(rand, 2)
-                    );
+                            OPERATORS[rand.nextInt(OPERATORS.length)],
+                            cloneTree(targetNode),
+                            randomTree(rand, 2));
                 } else {
                     // Replace with an if node
                     replacement = new IfNode(
-                        randomTree(rand, 2),
-                        cloneTree(targetNode),
-                        randomTree(rand, 2)
-                    );
+                            randomTree(rand, 2),
+                            cloneTree(targetNode),
+                            randomTree(rand, 2));
                 }
                 replaceNode(mutated, targetNode, replacement);
             }
         }
-        
-        return mutated;
-    }    
 
-    
+        return mutated;
+    }
 
     private static Node cloneSubtree(Node node) {
         return cloneTree(node);
@@ -537,9 +580,6 @@ private static Node tournamentSelect(List<Node> population, Map<Node, Double> fi
         return null;
     }
 
-    
-
-      
     private static double calculateAccuracy(Node tree, List<DataPoint> dataset) {
         int correct = 0;
         for (DataPoint dp : dataset) {
@@ -550,16 +590,16 @@ private static Node tournamentSelect(List<Node> population, Map<Node, Double> fi
         return correct / (double) dataset.size();
     }
 
-     private static int[] calculateConfusionMatrix(Node tree, List<DataPoint> dataset) {
+    private static int[] calculateConfusionMatrix(Node tree, List<DataPoint> dataset) {
         int truePositives = 0;
         int falsePositives = 0;
         int falseNegatives = 0;
         int trueNegatives = 0;
-        
+
         for (DataPoint dp : dataset) {
             int prediction = tree.classify(dp);
             int actual = dp.output;
-            
+
             if (prediction == 1 && actual == 1) {
                 truePositives++;
             } else if (prediction == 1 && actual == 0) {
@@ -570,28 +610,63 @@ private static Node tournamentSelect(List<Node> population, Map<Node, Double> fi
                 trueNegatives++;
             }
         }
-        
-        return new int[] {truePositives, falsePositives, falseNegatives, trueNegatives};
+
+        return new int[] { truePositives, falsePositives, falseNegatives, trueNegatives };
     }
 
     private static double calculateF1Score(int[] confusionMatrix) {
         int truePositives = confusionMatrix[0];
         int falsePositives = confusionMatrix[1];
         int falseNegatives = confusionMatrix[2];
-        
+
         // Calculate precision and recall
-        double precision = truePositives == 0 ? 0 : 
-            (double) truePositives / (truePositives + falsePositives);
-        double recall = truePositives == 0 ? 0 : 
-            (double) truePositives / (truePositives + falseNegatives);
-        
+        double precision = truePositives == 0 ? 0 : (double) truePositives / (truePositives + falsePositives);
+        double recall = truePositives == 0 ? 0 : (double) truePositives / (truePositives + falseNegatives);
+
         // Calculate F1 score
-        double f1Score = (precision + recall) == 0 ? 0 : 
-            2 * (precision * recall) / (precision + recall);
-            
+        double f1Score = (precision + recall) == 0 ? 0 : 2 * (precision * recall) / (precision + recall);
+
         return f1Score;
     }
 
-    
+    public static double runGP(Instances train, Instances test, int seed) throws Exception {
+        // 1. Create classifier
+       // Debug: dataset info
+    System.out.println("Train set size: " + train.numInstances());
+    System.out.println("Test set size: " + test.numInstances());
+
+        weka.filters.unsupervised.attribute.NumericToNominal filter = new weka.filters.unsupervised.attribute.NumericToNominal();
+    filter.setAttributeIndices("last"); // assumes Output is the last column
+    filter.setInputFormat(train);
+    train = Filter.useFilter(train, filter);
+    test = Filter.useFilter(test, filter);
+
+    // Create classifier
+   // Classifier classifier = new weka.classifiers.trees.J48(); // Decision Tree
+    weka.classifiers.trees.RandomForest classifier = new weka.classifiers.trees.RandomForest();
+classifier.setSeed(seed);
+    classifier.buildClassifier(train);
+
+    // Evaluate
+    Evaluation eval = new Evaluation(train);
+    eval.evaluateModel(classifier, test);
+
+    // Check confusion matrix
+    double[][] matrix = eval.confusionMatrix();
+    System.out.println("Confusion matrix: " + Arrays.deepToString(matrix));
+
+    // Debug: list class values
+    System.out.println("Class attribute: " + train.classAttribute().name());
+    for (int i = 0; i < train.classAttribute().numValues(); i++) {
+        System.out.println("Class value " + i + ": " + train.classAttribute().value(i));
+    }
+
+    // Get F1 score of class index 1 (usually the positive class in binary classification)
+    double f1 = eval.fMeasure(1);
+    System.out.printf("Seed %d Test F1: %.4f\n", seed, f1);
+
+    return f1;
+
+    }
 
 }

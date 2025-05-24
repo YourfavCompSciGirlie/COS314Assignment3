@@ -6,8 +6,10 @@ import random
 from tabulate import tabulate
 import matplotlib.pyplot as plt
 from tensorflow import keras
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Dropout
+# from tensorflow.keras.models import Sequential
+from keras.models import Sequential, load_model
+from keras.layers import Input, Dense, Dropout
+# from tensorflow.keras.layers import Dense, Dropout
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import classification_report, confusion_matrix, f1_score
 from sklearn.model_selection import train_test_split
@@ -33,6 +35,7 @@ n_epochs = int(input("Enter max epochs (default 50): ") or "50")
 # Store results of all runs
 results_table = []
 all_results = []
+open("../wilxon_test/mlp_f1_scores.txt", "w").close()
 
 # Perform 10 runs
 for run in range(10):
@@ -144,6 +147,11 @@ for run in range(10):
         'history': history.history
     }
     all_results.append(run_results)
+
+    # Save test F1 score to file
+    with open("../wilxon_test/mlp_f1_scores.txt", "a") as f:
+        f.write(f"{test_f1}\n")
+
 
 # Print results table
 headers = ["Seed", "Train Acc", "Train F1", "Test Acc", "Test F1"]
