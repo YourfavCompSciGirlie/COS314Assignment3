@@ -35,7 +35,7 @@ n_epochs = int(input("Enter max epochs (default 50): ") or "50")
 # Store results of all runs
 results_table = []
 all_results = []
-open("./wilxon_test/mlp_f1_scores.txt", "w").close()
+open("../wilxon_test/mlp_f1_scores.txt", "w").close()
 
 # Perform 10 runs
 for run in range(10):
@@ -149,7 +149,7 @@ for run in range(10):
     all_results.append(run_results)
 
     # Save test F1 score to file
-    with open("./wilxon_test/mlp_f1_scores.txt", "a") as f:
+    with open("../wilxon_test/mlp_f1_scores.txt", "a") as f:
         f.write(f"{test_f1}\n")
 
 
