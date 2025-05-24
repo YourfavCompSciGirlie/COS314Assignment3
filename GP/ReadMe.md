@@ -92,11 +92,21 @@ double MUTATION_RATE = 0.1;
    ```bash
    java -jar GPClassifier.jar
    ```
+
+4. Run Weka tests
+
+   ```bash
+   javac -cp ".;weka.jar;mtj-1.0.4.jar;netlib-java-1.1.jar;native_ref-java-1.1.jar;native_system-java-1.1.jar" GP_Classifier.java
+   java --add-opens java.base/java.lang=ALL-UNNAMED -cp ".;weka.jar;mtj-1.0.4.jar;netlib-java-1.1.jar native_ref-java-1.1.jar;native_system-java-1.1.jar" GP_Classifier
+
+   ```
 ---
+
 
 ### Output
 
 * Displays training and testing accuracy.
 * Prints the best evolved tree and its fitness score.
 * Displays F1 score and confusion matrix
+* 
 

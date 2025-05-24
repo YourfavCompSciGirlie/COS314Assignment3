@@ -2,7 +2,9 @@ import java.io.*;
 import java.util.*;
 
 import weka.core.Instances;
+import weka.filters.Filter;
 import weka.classifiers.Evaluation;
+import weka.classifiers.Classifier;
 
 // === Data Model ===
 class DataPoint {
@@ -235,8 +237,10 @@ public class GP_Classifier {
         Instances train = null;
         Instances test = null;
         try {
-            weka.core.converters.ConverterUtils.DataSource trainSource = new weka.core.converters.ConverterUtils.DataSource("./Euro_USD_Stock/BTC_train.arff");
-            weka.core.converters.ConverterUtils.DataSource testSource = new weka.core.converters.ConverterUtils.DataSource("./Euro_USD_Stock/BTC_test.arff");
+            weka.core.converters.ConverterUtils.DataSource trainSource = new weka.core.converters.ConverterUtils.DataSource(
+                    "./Euro_USD_Stock/BTC_train.csv");
+            weka.core.converters.ConverterUtils.DataSource testSource = new weka.core.converters.ConverterUtils.DataSource(
+                    "./Euro_USD_Stock/BTC_test.csv");
             train = trainSource.getDataSet();
             test = testSource.getDataSet();
             if (train.classIndex() == -1)
@@ -251,8 +255,8 @@ public class GP_Classifier {
 
         // Prepare file writer for output scores
         BufferedWriter writer = new BufferedWriter(new FileWriter("../wilxon_test/gp_f1_scores.txt", false)); // overwrite
-                                                                                                                // old
-                                                                                                                // file
+                                                                                                              // old
+                                                                                                              // file
 
         System.out.println("Running 10 GP trials for Wilcoxon test:");
         for (int i = 0; i < 10; i++) {
@@ -626,15 +630,43 @@ public class GP_Classifier {
     }
 
     public static double runGP(Instances train, Instances test, int seed) throws Exception {
-        weka.classifiers.Classifier gp = new weka.classifiers.functions.GaussianProcesses();
-        gp.buildClassifier(train);
+        // 1. Create classifier
+       // Debug: dataset info
+    System.out.println("Train set size: " + train.numInstances());
+    System.out.println("Test set size: " + test.numInstances());
 
-        Evaluation eval = new Evaluation(train);
-        eval.evaluateModel(gp, test);
+        weka.filters.unsupervised.attribute.NumericToNominal filter = new weka.filters.unsupervised.attribute.NumericToNominal();
+    filter.setAttributeIndices("last"); // assumes Output is the last column
+    filter.setInputFormat(train);
+    train = Filter.useFilter(train, filter);
+    test = Filter.useFilter(test, filter);
 
-        double f1Score = eval.fMeasure(1); // assuming class "1" is the positive class
-        System.out.printf("Seed %d Test F1: %.4f\n", seed, f1Score);
-        return f1Score;
+    // Create classifier
+   // Classifier classifier = new weka.classifiers.trees.J48(); // Decision Tree
+    weka.classifiers.trees.RandomForest classifier = new weka.classifiers.trees.RandomForest();
+classifier.setSeed(seed);
+    classifier.buildClassifier(train);
+
+    // Evaluate
+    Evaluation eval = new Evaluation(train);
+    eval.evaluateModel(classifier, test);
+
+    // Check confusion matrix
+    double[][] matrix = eval.confusionMatrix();
+    System.out.println("Confusion matrix: " + Arrays.deepToString(matrix));
+
+    // Debug: list class values
+    System.out.println("Class attribute: " + train.classAttribute().name());
+    for (int i = 0; i < train.classAttribute().numValues(); i++) {
+        System.out.println("Class value " + i + ": " + train.classAttribute().value(i));
+    }
+
+    // Get F1 score of class index 1 (usually the positive class in binary classification)
+    double f1 = eval.fMeasure(1);
+    System.out.printf("Seed %d Test F1: %.4f\n", seed, f1);
+
+    return f1;
+
     }
 
 }
